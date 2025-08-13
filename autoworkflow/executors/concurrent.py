@@ -241,10 +241,8 @@ class ConcurrentExecutor(Executor):
                             )
                             continue
                         selected = allowed_target_for_case.get(case_id)
-                        if selected is not None and (
-                            selected == "__CONST__" or node_id != selected
-                        ):
-                            # Non-selected (or constant) branch targets: mark skipped and finalize
+                        if selected is not None and node_id != selected:
+                            # Non-selected branch targets: mark skipped and finalize
                             disabled_nodes.add(node_id)
                             logger.debug(
                                 "[SCHEDULE] Disabling non-selected branch %s for case %s (selected=%s)",
@@ -252,21 +250,6 @@ class ConcurrentExecutor(Executor):
                                 case_id,
                                 selected,
                             )
-                            if event_sink and run_id:
-                                try:
-                                    from ..services.telemetry import NodeEvent
-
-                                    event_sink.on_node_event(
-                                        NodeEvent(
-                                            run_id,
-                                            node_id,
-                                            "finished",
-                                            time.time(),
-                                            {"status": "skipped"},
-                                        )
-                                    )
-                                except Exception:
-                                    pass
                             sorter.done(node_id)
                             continue
 
@@ -505,6 +488,26 @@ class ConcurrentExecutor(Executor):
                         resolved_cases.add(node_id)
                         for tid in decision.disabled:
                             disabled_nodes.add(tid)
+                            if event_sink and run_id:
+                                logger.debug(
+                                    "[CASE] %s decision -> disabling branch %s, emitting skip event",
+                                    node_id,
+                                    tid,
+                                )
+                                try:
+                                    from ..services.telemetry import NodeEvent
+
+                                    event_sink.on_node_event(
+                                        NodeEvent(
+                                            run_id,
+                                            tid,
+                                            "finished",
+                                            time.time(),
+                                            {"status": "skipped"},
+                                        )
+                                    )
+                                except Exception:
+                                    pass
                         if decision.kind == "constant":
                             logger.debug(
                                 "[CASE] %s -> constant %r; disable=%s",
@@ -536,7 +539,6 @@ class ConcurrentExecutor(Executor):
                                 except Exception:
                                     pass
                             # Mark this case as a constant decision to disable all targets going forward
-                            allowed_target_for_case[node_id] = "__CONST__"
                             # Disable and finalize any deferred branch targets for this case
                             # Use both metadata mapping and the decision-disabled list to be robust
                             all_branch_tids = set(

@@ -1295,3 +1295,57 @@ def test_concurrent_case_target_path_persists_case_result():
     # case node and final should be persisted (selected target may or may not depending on timing)
     assert decision.node_id in saved_keys
     assert "final" in saved_keys
+
+
+def test_concurrent_case_target_then_late_ready_branch_targets_skipped_in_scheduler():
+
+    wf = Workflow(name="Conc-Case-Target-Late-Targets")
+
+    @wf.node
+    def on():
+        return 1  # choose t1
+
+    @wf.node
+    def gate():
+        time.sleep(0.02)  # make branch targets become ready after case resolves
+        return True
+
+    @wf.node
+    def t1(_g: bool = wf.dep(gate)):
+        return "T1"
+
+    @wf.node
+    def t2(_g: bool = wf.dep(gate)):
+        raise AssertionError("t2 should not be executed")
+
+    decision = wf.case(on=on, branches={1: t1, 2: t2})
+
+    @wf.node
+    def out(v=wf.dep(decision)):
+        return v
+
+    sink = InMemoryEventSink()
+    run_id = "rid-case-target-late-targets"
+    sink.on_run_started(run_id, wf.name)
+    res = wf.run(
+        executor="concurrent", return_mode="leaves", run_id=run_id, event_sink=sink
+    )
+    sink.on_run_finished(run_id, True)
+
+    assert res["out"] == "T1"
+    evs = sink.get_events()
+    # t2 should not start; it is skipped by scheduler after case resolved to t1
+    assert _count(evs, "t2", "started") == 0
+    # t2 should be marked as skipped
+    assert any(
+        e.node_id == "t2"
+        and e.event == "finished"
+        and (e.data or {}).get("status") == "skipped"
+        for e in evs
+    )
+    # t1 should have run
+    assert _count(evs, "t1", "started") >= 1
+    assert _count(evs, "t1", "finished") >= 1
+    # case scheduled and finished
+    assert _count(evs, decision.node_id, "scheduled") >= 1
+    assert _count(evs, decision.node_id, "finished") >= 1
