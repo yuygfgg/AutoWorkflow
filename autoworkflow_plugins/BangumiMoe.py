@@ -1,4 +1,5 @@
-"""Bangumi.moe plugin for AutoWorkflow.
+"""
+Bangumi.moe plugin for AutoWorkflow.
 
 Provides an authenticated Bangumi.moe client and injects it into the
 workflow context during Engine runs.
@@ -124,7 +125,8 @@ class HasBangumiMoe(Protocol):
 
 
 class BangumiMoePlugin(Plugin[BangumiMoeClient]):
-    """Plugin that integrates Bangumi.moe Web API.
+    """
+    Plugin that integrates Bangumi.moe Web API.
 
     Creates and authenticates a client in setup() and injects it into the
     workflow context under attribute name "bangumi_moe" by default.

@@ -1,4 +1,5 @@
-"""QBittorrent plugin for AutoWorkflow.
+"""
+QBittorrent plugin for AutoWorkflow.
 
 Provides an authenticated qBittorrent WebUI client and injects it into
 the workflow context during Engine runs.
@@ -35,7 +36,8 @@ class HasQBittorrent(Protocol):
 
 
 class QBittorrentPlugin(Plugin[Any]):
-    """Plugin that integrates qBittorrent's WebUI via qbittorrent-api.
+    """
+    Plugin that integrates qBittorrent's WebUI via qbittorrent-api.
 
     Creates and authenticates a client in setup() and injects it into the
     workflow context under common attribute names ("qbittorrent").
@@ -71,7 +73,8 @@ class QBittorrentPlugin(Plugin[Any]):
         return self._name
 
     def setup(self, engine: "Engine", config: Dict[str, Any]):  # type: ignore[name-defined]
-        """Initialize and authenticate the qBittorrent client.
+        """
+        Initialize and authenticate the qBittorrent client.
 
         Reads configuration from Engine.config under the key "qbittorrent"
         """
