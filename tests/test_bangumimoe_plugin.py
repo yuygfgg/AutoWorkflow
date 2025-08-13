@@ -11,7 +11,9 @@ from autoworkflow_plugins import BangumiMoePlugin
 
 
 class _DummyResponse:
-    def __init__(self, status_code: int = 200, json_data: Any | None = None, text: str = ""):
+    def __init__(
+        self, status_code: int = 200, json_data: Any | None = None, text: str = ""
+    ):
         self.status_code = status_code
         self._json_data = json_data or {}
         self.text = text
@@ -29,15 +31,19 @@ class _DummySession:
         self.calls: list[dict[str, Any]] = []
         self.closed = False
 
-    def post(self, url: str, headers=None, json=None, files=None, timeout=None, verify=None):
-        self.calls.append({
-            "url": url,
-            "headers": headers,
-            "json": json,
-            "files": files,
-            "timeout": timeout,
-            "verify": verify,
-        })
+    def post(
+        self, url: str, headers=None, json=None, files=None, timeout=None, verify=None
+    ):
+        self.calls.append(
+            {
+                "url": url,
+                "headers": headers,
+                "json": json,
+                "files": files,
+                "timeout": timeout,
+                "verify": verify,
+            }
+        )
         if url.endswith("/api/user/signin"):
             return _DummyResponse(200, {"ok": True})
         if url.endswith("/api/v2/torrent/upload"):
@@ -86,18 +92,22 @@ def test_bangumimoe_plugin_setup_and_teardown_with_constructor_args():
 
 
 def test_bangumimoe_plugin_setup_with_engine_config_override():
-    eng = Engine(config={
-        "bangumi_moe": {
-            "base_url": "https://example.org",
-            "username": "u2",
-            "password": "p2",
-            "verify_ssl": False,
-            "timeout": 7,
+    eng = Engine(
+        config={
+            "bangumi_moe": {
+                "base_url": "https://example.org",
+                "username": "u2",
+                "password": "p2",
+                "verify_ssl": False,
+                "timeout": 7,
+            }
         }
-    })
+    )
 
     # constructor args should be overridden by engine config
-    pl = BangumiMoePlugin(username="ignored", password="ignored", base_url="https://ignored")
+    pl = BangumiMoePlugin(
+        username="ignored", password="ignored", base_url="https://ignored"
+    )
     pl.setup(eng, eng.config)
     provider = pl.get_context_provider()
     assert provider is not None
@@ -117,3 +127,25 @@ def test_bangumimoe_client_publish_flow(tmp_path):
     res = client.publish(str(torrent_path), title="T", introduction="I")
     assert res.get("ok") is True
 
+
+def test_bangumimoe_plugin_supports_fallback_keys_with_class_name():
+    eng = Engine(
+        config={
+            "BangumiMoePlugin": {
+                "base_url": "https://fallback.example",
+                "username": "fu",
+                "password": "fp",
+                "verify_ssl": True,
+                "timeout": 12,
+            }
+        }
+    )
+
+    pl = BangumiMoePlugin()  # default name
+    pl.setup(eng, eng.config)
+
+    provider = pl.get_context_provider()
+    assert provider is not None
+    assert provider.base_url == "https://fallback.example"  # type: ignore[attr-defined]
+    assert provider.username == "fu"
+    assert provider.password == "fp"

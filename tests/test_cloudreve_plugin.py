@@ -76,3 +76,23 @@ def test_engine_injects_cloudreve_into_context():
     eng.inject_plugins_into_context(ctx)
     assert getattr(ctx, "cloudreve", None) is not None
     assert isinstance(ctx.cloudreve, _DummyCloudreve)
+
+
+def test_cloudreve_plugin_supports_fallback_keys_with_class_name():
+    eng = Engine(
+        config={
+            "CloudrevePlugin": {
+                "base_url": "http://fb:5212",
+                "username": "fu",
+                "password": "fp",
+            }
+        }
+    )
+
+    pl = CloudrevePlugin()
+    pl.setup(eng, eng.config)
+
+    provider = pl.get_context_provider()
+    assert isinstance(provider, _DummyCloudreve)
+    assert provider.base_url == "http://fb:5212"
+    assert provider.login_args == ("fu", "fp")

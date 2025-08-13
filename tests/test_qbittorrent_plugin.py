@@ -88,3 +88,26 @@ def test_qbittorrent_plugin_uses_constructor_defaults_when_missing_config():
     assert isinstance(provider, _DummyClient)
     # ensure teardown path runs without errors
     pl.teardown()
+    
+
+def test_qbittorrent_plugin_supports_fallback_keys_with_class_name():
+    engine = Engine(
+        config={
+            "QBittorrentPlugin": {
+                "host": "fbhost",
+                "port": 8090,
+                "username": "fu",
+                "password": "fp",
+                "use_https": True,
+                "verify_ssl": False,
+                "timeout": 9,
+            }
+        }
+    )
+
+    pl = QBittorrentPlugin()  # default name is "qbittorrent"
+    pl.setup(engine, engine.config)
+    provider = pl.get_context_provider()
+    assert isinstance(provider, _DummyClient)
+    assert provider.kwargs["host"] == "fbhost"
+    assert provider.kwargs["port"] == 8090

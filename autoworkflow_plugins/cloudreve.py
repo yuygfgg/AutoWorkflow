@@ -107,10 +107,8 @@ def _extract_cloudreve_config(
 ) -> Dict[str, Any] | None:
     if not config:
         return None
-    # Preferred key
     if "cloudreve" in config and isinstance(config["cloudreve"], dict):
         return config["cloudreve"]
-    # Additional fallbacks
     if fallback_keys:
         for key in fallback_keys:
             val = config.get(key)
