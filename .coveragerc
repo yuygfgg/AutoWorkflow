@@ -1,0 +1,18 @@
+[run]
+branch = True
+source =
+    autoworkflow
+    autoworkflow_plugins
+
+[report]
+show_missing = True
+skip_covered = True
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    ^\s*log(?:ger)?\.(?:debug|info|warning|error|critical)
+    ^\s*\.\.\.$
+    :\s*\.\.\.
+
+

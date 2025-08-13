@@ -1,0 +1,307 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AutoWorkflow UI</title>
+    <style>
+        :root {
+            --bg: #0b1220;
+            --fg: #e6edf3;
+            --muted: #9fb1c5;
+            --card: #111a2e;
+            --border: #25324a;
+            --accent: #4cc9f0;
+            --ok: #2dd4bf;
+            --warn: #f97316;
+            --err: #ef4444;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            background: linear-gradient(180deg, #0b1220 0%, #0b1326 100%);
+            color: var(--fg);
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        }
+
+        header {
+            position: sticky;
+            top: 0;
+            background: rgba(11, 18, 32, 0.8);
+            backdrop-filter: blur(6px);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+
+            50% {
+                opacity: .5;
+                box-shadow: 0 0 12px var(--accent);
+            }
+        }
+
+        main {
+            padding: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        @media (min-width: 1024px) {
+            .grid {
+                grid-template-columns: 1.2fr 1fr;
+            }
+        }
+
+        .card {
+            background: linear-gradient(180deg, rgba(17, 26, 46, 0.9), rgba(17, 26, 46, 0.7));
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25) inset;
+        }
+
+        .title {
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            color: var(--fg);
+            margin: 0 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .muted {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .run {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 10px;
+            background: rgba(37, 50, 74, 0.4);
+            border: 1px solid rgba(37, 50, 74, 0.7);
+        }
+
+        .run-details {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: var(--muted);
+            margin: 4px 0 10px;
+        }
+
+        .workflow-item {
+            margin-bottom: 16px;
+        }
+
+        .mermaid {
+            background: #0e1729;
+            border-radius: 8px;
+            padding: 10px;
+            border: 1px solid #1c2840;
+            transition: background .2s;
+        }
+
+        .mermaid svg {
+            width: 100%;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="dot"></div>
+        <div>AutoWorkflow UI</div>
+        <div id="last-updated" class="muted" style="margin-left: auto;"></div>
+    </header>
+    <main>
+        <div class="grid">
+            <div class="card">
+                <div class="title">Runs</div>
+                <div id="runs"></div>
+            </div>
+            <div class="card">
+                <div class="title">Workflows</div>
+                <div id="workflows"></div>
+            </div>
+        </div>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        const style = getComputedStyle(document.documentElement);
+        const colors = {
+            bg: style.getPropertyValue('--bg').trim(),
+            fg: style.getPropertyValue('--fg').trim(),
+            muted: style.getPropertyValue('--muted').trim(),
+            card: style.getPropertyValue('--card').trim(),
+            border: style.getPropertyValue('--border').trim(),
+            accent: style.getPropertyValue('--accent').trim(),
+            ok: style.getPropertyValue('--ok').trim(),
+            warn: style.getPropertyValue('--warn').trim(),
+            err: style.getPropertyValue('--err').trim(),
+        };
+
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'base',
+            themeVariables: {
+                background: colors.bg,
+                primaryColor: colors.card,
+                primaryTextColor: colors.fg,
+                primaryBorderColor: colors.border,
+                lineColor: colors.muted,
+                secondaryColor: colors.card,
+                tertiaryColor: colors.bg,
+                nodeBorder: colors.border,
+                mainBkg: colors.card,
+                errorBkgColor: colors.err,
+                errorTextColor: colors.fg,
+            }
+        });
+
+        const runsEl = document.getElementById('runs');
+        const wfsEl = document.getElementById('workflows');
+        const lastUpdatedEl = document.getElementById('last-updated');
+        let WF_CACHE = {};
+
+        function buildMermaidGraph(wf) {
+            let mermaidGraph = 'graph TD;\n';
+            const allNodes = new Set(wf.nodes || []);
+            const referencedNodes = new Set();
+
+            if (wf.dependencies) {
+                for (const node in wf.dependencies) {
+                    allNodes.add(node);
+                    for (const dep of wf.dependencies[node]) {
+                        allNodes.add(dep);
+                        referencedNodes.add(node);
+                        referencedNodes.add(dep);
+                        mermaidGraph += `    ${dep} --> ${node};\n`;
+                    }
+                }
+            }
+            allNodes.forEach(node => {
+                if (!referencedNodes.has(node)) {
+                    mermaidGraph += `    ${node};\n`;
+                }
+            });
+            return mermaidGraph;
+        }
+
+        function render(runs, wfs) {
+            runsEl.innerHTML = Object.entries(runs).map(([rid, info]) => {
+                const wf = (WF_CACHE && WF_CACHE[info.workflow_name]) || {};
+                let mermaidGraph = buildMermaidGraph(wf);
+
+                const ns = info.node_status || {};
+                mermaidGraph += `classDef s-queued fill:${colors.accent},stroke:${colors.border},color:${colors.bg},fontWeight:600;\n`;
+                mermaidGraph += `classDef s-running fill:${colors.warn},stroke:${colors.border},color:${colors.bg},fontWeight:600;\n`;
+                mermaidGraph += `classDef s-done fill:${colors.ok},stroke:${colors.border},color:${colors.bg},fontWeight:600;\n`;
+                mermaidGraph += `classDef s-failed fill:${colors.err},stroke:${colors.border},color:${colors.bg},fontWeight:600;\n`;
+                mermaidGraph += `classDef s-pending fill:${colors.card},stroke:${colors.border},color:${colors.fg};\n`;
+
+                (wf.nodes || []).forEach((nid) => {
+                    const st = ns[nid] || 'pending';
+                    mermaidGraph += `class ${nid} s-${st};\n`;
+                });
+
+                return `<div class="run">
+            <div><b>Run</b> ${rid} <span class="muted">(${info.workflow_name})</span></div>
+            <div class="run-details">
+                <div><b>Started:</b> ${new Date(info.started_at * 1000).toLocaleString()}</div>
+                <div><b>Finished:</b> ${info.finished_at ? new Date(info.finished_at * 1000).toLocaleString() : '-'}</div>
+                <div><b>Success:</b> ${info.success}</div>
+            </div>
+            <div class="mermaid" style="background: transparent; border: none; padding: 0;">${mermaidGraph}</div>
+          </div>`;
+            }).join('');
+
+            wfsEl.innerHTML = Object.entries(wfs).map(([name, wf]) => {
+                let mermaidGraph = buildMermaidGraph(wf);
+                return `<div class="workflow-item">
+                    <div class="title">${name}</div>
+                    ${wf.description ? `<div class="muted" style="margin-bottom: 8px;">${wf.description}</div>` : ''}
+                    <div class="mermaid">${mermaidGraph}</div>
+                </div>`
+            }).join('');
+            mermaid.run({
+                nodes: document.querySelectorAll('.mermaid')
+            });
+            lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+        }
+
+        async function bootstrap() {
+            lastUpdatedEl.textContent = 'Loading...';
+            const runs = await fetch('/runs').then(r => r.json());
+            const wfs = await fetch('/workflows').then(r => r.json());
+            WF_CACHE = wfs;
+            render(runs, wfs);
+        }
+
+        // SSE stream
+        let latestSeq = 0;
+        function startSSE() {
+            const ev = new EventSource('/events');
+            ev.onmessage = (msg) => {
+                try {
+                    const payload = JSON.parse(msg.data);
+                    latestSeq = payload.seq || latestSeq;
+                    if (payload.type === 'snapshot') {
+                        WF_CACHE = payload.workflows || {};
+                        render(payload.runs || {}, WF_CACHE);
+                        sessionStorage.setItem('wf', JSON.stringify(WF_CACHE));
+                        return;
+                    }
+                    if (payload.type === 'events') {
+                        // on incremental events, refetch runs (small data) and update
+                        fetch('/runs').then(r => r.json()).then(runs => {
+                            render(runs, WF_CACHE);
+                        });
+                        return;
+                    }
+                } catch (e) { /* ignore */ }
+            };
+            ev.onerror = () => {
+                ev.close();
+                setTimeout(startSSE, 1500);
+            };
+        }
+
+        bootstrap().then(() => {
+            // cache workflows for light re-render
+            fetch('/workflows').then(r => r.json()).then(wf => { WF_CACHE = wf; sessionStorage.setItem('wf', JSON.stringify(wf)); });
+            startSSE();
+        });
+    </script>
+</body>
+
+</html>
