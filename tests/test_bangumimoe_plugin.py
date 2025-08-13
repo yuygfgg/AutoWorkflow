@@ -54,7 +54,7 @@ class _DummySession:
 def patch_requests(monkeypatch):
     fake_requests = types.SimpleNamespace(Session=_DummySession)
     monkeypatch.setattr(
-        "autoworkflow_plugins.BangumiMoe.requests", fake_requests, raising=True
+        "autoworkflow_plugins.bangumiMoe.requests", fake_requests, raising=True
     )
 
 

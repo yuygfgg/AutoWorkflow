@@ -21,7 +21,7 @@ class _DummyCloudreve:
 @pytest.fixture(autouse=True)
 def patch_cloudreve_sdk(monkeypatch):
     monkeypatch.setattr(
-        "autoworkflow_plugins.Cloudreve.CloudreveSDK", _DummyCloudreve, raising=True
+        "autoworkflow_plugins.cloudreve.CloudreveSDK", _DummyCloudreve, raising=True
     )
 
 

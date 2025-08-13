@@ -4,8 +4,8 @@ Install optional third-party dependencies per plugin as needed.
 """
 
 from .qbittorrent import QBittorrentPlugin, HasQBittorrent
-from .BangumiMoe import BangumiMoePlugin, HasBangumiMoe
-from .Cloudreve import CloudrevePlugin, HasCloudreve
+from .bangumiMoe import BangumiMoePlugin, HasBangumiMoe
+from .cloudreve import CloudrevePlugin, HasCloudreve
 
 __all__ = [
     "QBittorrentPlugin",
