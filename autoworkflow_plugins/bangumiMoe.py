@@ -78,12 +78,18 @@ class BangumiMoeClient:
         with open(file_path, "rb") as f:
             files = {"file": (file_path.split("/")[-1], f)}
             resp = self._session.post(
-                url, headers=headers, files=files, timeout=self.timeout, verify=self.verify_ssl
+                url,
+                headers=headers,
+                files=files,
+                timeout=self.timeout,
+                verify=self.verify_ssl,
             )
         resp.raise_for_status()
         return resp.json()
 
-    def add_torrent(self, templ_torrent_id: str, file_id: str, title: str, introduction: str) -> Dict[str, Any]:
+    def add_torrent(
+        self, templ_torrent_id: str, file_id: str, title: str, introduction: str
+    ) -> Dict[str, Any]:
         """Finalize and add an uploaded torrent with metadata."""
         if not self._is_logged_in:
             self.login()
@@ -96,12 +102,18 @@ class BangumiMoeClient:
             "introduction": introduction,
         }
         resp = self._session.post(
-            url, headers=headers, json=payload, timeout=self.timeout, verify=self.verify_ssl
+            url,
+            headers=headers,
+            json=payload,
+            timeout=self.timeout,
+            verify=self.verify_ssl,
         )
         resp.raise_for_status()
         return resp.json()
 
-    def publish(self, torrent_path: str, *, title: str, introduction: str) -> Dict[str, Any]:
+    def publish(
+        self, torrent_path: str, *, title: str, introduction: str
+    ) -> Dict[str, Any]:
         """Convenience method: upload then add in a single call."""
         up = self.upload_torrent(torrent_path)
         return self.add_torrent(
@@ -156,8 +168,13 @@ class BangumiMoePlugin(Plugin[BangumiMoeClient]):
     def name(self) -> str:
         return self._name
 
-    def setup(self, engine: "Engine", config: Dict[str, Any]):  # type: ignore[name-defined]
-        cfg = _extract_bangumimoe_config(config, fallback_keys=[self._name, "BangumiMoePlugin"]) or {}
+    def setup(self, engine: "Engine", config: Dict[str, Any]):
+        cfg = (
+            _extract_bangumimoe_config(
+                config, fallback_keys=[self._name, "BangumiMoePlugin"]
+            )
+            or {}
+        )
         merged = cast(
             BangumiMoeConfig,
             {
@@ -169,7 +186,9 @@ class BangumiMoePlugin(Plugin[BangumiMoeClient]):
         username = str(merged.get("username", "")).strip()
         password = str(merged.get("password", "")).strip()
         if not username or not password:
-            raise ValueError("BangumiMoePlugin requires 'username' and 'password' in config or constructor.")
+            raise ValueError(
+                "BangumiMoePlugin requires 'username' and 'password' in config or constructor."
+            )
 
         base_url = str(merged.get("base_url", "https://bangumi.moe")).strip()
         verify_ssl = bool(merged.get("verify_ssl", True))

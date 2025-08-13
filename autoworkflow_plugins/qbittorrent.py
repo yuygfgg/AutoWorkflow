@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from autoworkflow.services.engine import Engine
 
 import qbittorrentapi
+from qbittorrentapi import Client as QBittorrentClient
 
 
 class QBittorrentConfig(TypedDict, total=False):
@@ -32,10 +33,10 @@ class HasQBittorrent(Protocol):
     Context typing helper for IDE completion.
     """
 
-    qbittorrent: qbittorrentapi.Client | None
+    qbittorrent: QBittorrentClient | None
 
 
-class QBittorrentPlugin(Plugin[Any]):
+class QBittorrentPlugin(Plugin[QBittorrentClient]):
     """
     Plugin that integrates qBittorrent's WebUI via qbittorrent-api.
 
@@ -56,7 +57,7 @@ class QBittorrentPlugin(Plugin[Any]):
         timeout: int = 30,
     ):
         self._name = name
-        self._client: Any | None = None
+        self._client: QBittorrentClient | None = None
         # Optional instance-level config to enable IDE hints on constructor
         self._config_override: QBittorrentConfig = {
             "host": host,
@@ -115,7 +116,7 @@ class QBittorrentPlugin(Plugin[Any]):
         client.auth_log_in()
         self._client = client
 
-    def get_context_provider(self) -> Any:
+    def get_context_provider(self) -> QBittorrentClient | None:
         """Return the configured qBittorrent client instance."""
         return self._client
 

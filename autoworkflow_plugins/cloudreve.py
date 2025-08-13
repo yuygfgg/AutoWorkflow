@@ -14,7 +14,7 @@ from autoworkflow.services.plugins import Plugin
 if TYPE_CHECKING:
     from autoworkflow.services.engine import Engine
 
-from cloudreve import Cloudreve as CloudreveSDK
+from cloudreve import Cloudreve as CloudreveClient
 
 
 class CloudreveConfig(TypedDict, total=False):
@@ -28,10 +28,10 @@ class CloudreveConfig(TypedDict, total=False):
 class HasCloudreve(Protocol):
     """Context typing helper for IDE completion."""
 
-    cloudreve: Any | None
+    cloudreve: CloudreveClient | None
 
 
-class CloudrevePlugin(Plugin[Any]):
+class CloudrevePlugin(Plugin[CloudreveClient]):
     """
     Plugin that integrates Cloudreve via the python `cloudreve` SDK.
 
@@ -48,7 +48,7 @@ class CloudrevePlugin(Plugin[Any]):
         password: str | None = None,
     ):
         self._name = name
-        self._client: Any | None = None
+        self._client: CloudreveClient | None = None
         self._config_override: CloudreveConfig = {
             "base_url": base_url,
             "username": username or "",
@@ -86,12 +86,12 @@ class CloudrevePlugin(Plugin[Any]):
                 "CloudrevePlugin requires 'username' (or 'email') and 'password'."
             )
 
-        client = CloudreveSDK(base_url)
+        client = CloudreveClient(base_url)
         # Perform login early to fail-fast
         client.login(username, password)
         self._client = client
 
-    def get_context_provider(self) -> Any | None:
+    def get_context_provider(self) -> CloudreveClient | None:
         return self._client
 
     def get_context_injections(self) -> Dict[str, Any]:
