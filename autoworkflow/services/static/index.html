@@ -189,6 +189,9 @@
         let WF_CACHE = {};
 
         function buildMermaidGraph(wf) {
+            const DEBUG_MERMAID = true;
+            function logEdge(str) { if (DEBUG_MERMAID) console.log('[mermaid][edge]', str + ';'); }
+            function logNode(str) { if (DEBUG_MERMAID) console.log('[mermaid][node]', str + ';'); }
             // Fallback for old data structure
             if (!wf.nodes_meta) {
                 let mermaidGraph = 'graph LR;\n';
@@ -202,13 +205,17 @@
                             allNodes.add(dep);
                             referencedNodes.add(node);
                             referencedNodes.add(dep);
-                            mermaidGraph += `    ${dep} --> ${node};\n`;
+                            const line = `    ${dep} --> ${node}`;
+                            logEdge(line);
+                            mermaidGraph += line + `;\n`;
                         }
                     }
                 }
                 allNodes.forEach(node => {
                     if (!referencedNodes.has(node)) {
-                        mermaidGraph += `    ${node};\n`;
+                        const line = `    ${node}`;
+                        logNode(line);
+                        mermaidGraph += line + `;\n`;
                     }
                 });
                 return mermaidGraph;
@@ -226,7 +233,24 @@
             const allNodesInEdges = new Set();
 
             function escapeLabel(txt) {
-                return String(txt).replace(/"/g, '#quot;');
+                const s = String(txt);
+                return s
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '#quot;');
+            }
+
+            function normalizeCondLabel(cond) {
+                try {
+                    if (cond == null) return '';
+                    const s = String(cond);
+                    if (s.includes('otherwise')) return 'otherwise';
+                    if (s.startsWith('<function') || s.includes(' at 0x')) return 'predicate';
+                    return s;
+                } catch (e) {
+                    return 'predicate';
+                }
             }
 
             function formatArgLabel(arg, path) {
@@ -244,8 +268,20 @@
                     for (const item of arr) {
                         if (!item || !item.from) continue;
                         if (caseNodeIds.has(item.from)) continue; // edges FROM case handled separately
-                        const label = formatArgLabel(item.arg || '', item.path || '');
-                        edges.add(`    ${item.from} -- ${label} --> ${nodeId}`);
+                        const rawArg = item.arg || '';
+                        const rawPath = item.path || '';
+                        const hasLabel = Boolean(String(rawArg).trim() || String(rawPath).trim());
+                        if (hasLabel) {
+                            const label = formatArgLabel(rawArg, rawPath);
+                            const line = `    ${item.from} -- ${label} --> ${nodeId}`;
+                            logEdge(line);
+                            edges.add(line);
+                        } else {
+                            // If no label info, fall back to unlabeled edge to keep Mermaid syntax valid
+                            const line = `    ${item.from} --> ${nodeId}`;
+                            logEdge(line);
+                            edges.add(line);
+                        }
                     }
                 }
             } else {
@@ -254,7 +290,9 @@
                     if (caseNodeIds.has(nodeId)) continue;
                     for (const depId of dependencies[nodeId]) {
                         if (caseNodeIds.has(depId)) continue;
-                        edges.add(`    ${depId} --> ${nodeId}`);
+                        const line = `    ${depId} --> ${nodeId}`;
+                        logEdge(line);
+                        edges.add(line);
                     }
                 }
             }
@@ -281,7 +319,8 @@
                 }
 
                 for (const branch of caseNode.branches) {
-                    const condition = escapeLabel(branch.condition);
+                    const safeCondRaw = normalizeCondLabel(branch.condition);
+                    const condition = escapeLabel(safeCondRaw);
                     if (branch.target_node) {
                         // edge from on -> target labeled by condition
                         edges.add(`    ${onNode} -- ${condition} --> ${branch.target_node}`);
@@ -296,16 +335,24 @@
                         }
                     } else {
                         // constant branch: create a dummy node and connect
-                        const dummyNodeId = `${caseNode.id}_${condition.replace(/\W/g, '_')}_noop`;
+                        const dummyNodeId = `${caseNode.id}_${safeCondRaw.replace(/\W/g, '_')}_noop`;
                         const dummyNodeLabel = `(no op)`;
-                        mermaidGraph += `    ${dummyNodeId}["${dummyNodeLabel}"];\n`;
-                        edges.add(`    ${onNode} -- ${condition} --> ${dummyNodeId}`);
+                        const nodeLine = `    ${dummyNodeId}["${dummyNodeLabel}"]`;
+                        logNode(nodeLine);
+                        mermaidGraph += nodeLine + `;\n`;
+                        const edgeLine = `    ${onNode} -- ${condition} --> ${dummyNodeId}`;
+                        logEdge(edgeLine);
+                        edges.add(edgeLine);
                         for (const successor of successors) {
                             const argLabel = escapeLabel(succArgNameMap[successor] || '');
                             if (argLabel) {
-                                edges.add(`    ${dummyNodeId} -- ${argLabel} --> ${successor}`);
+                                const line = `    ${dummyNodeId} -- ${argLabel} --> ${successor}`;
+                                logEdge(line);
+                                edges.add(line);
                             } else {
-                                edges.add(`    ${dummyNodeId} --> ${successor}`);
+                                const line = `    ${dummyNodeId} --> ${successor}`;
+                                logEdge(line);
+                                edges.add(line);
                             }
                         }
                     }
@@ -313,6 +360,7 @@
             }
 
             edges.forEach(edge => {
+                if (DEBUG_MERMAID) console.log('[mermaid][emit]', edge + ';');
                 mermaidGraph += `${edge};\n`;
                 // A bit simplistic, but should cover most node names
                 const match = edge.trim().match(/^(\w+)\s*--.*-->\s*(\w+)$/);
@@ -326,7 +374,9 @@
             const allGraphNodes = new Set(wf.nodes || []);
             allGraphNodes.forEach(nodeId => {
                 if (!allNodesInEdges.has(nodeId) && !caseNodeIds.has(nodeId)) {
-                    mermaidGraph += `    ${nodeId};\n`;
+                    const line = `    ${nodeId}`;
+                    logNode(line);
+                    mermaidGraph += line + `;\n`;
                 }
             });
 

@@ -147,6 +147,7 @@ class DirectoryWatchTrigger:
                     self._seen.add(full_path)
                     payload = {self.payload_key: full_path}
                     try:
+                        logger.info("DirectoryWatchTrigger payload: %s", payload)
                         self._callback(payload)
                     except Exception:
                         logger.exception(

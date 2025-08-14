@@ -2,14 +2,14 @@
 
 [![codecov](https://codecov.io/gh/yuygfgg/AutoWorkflow/graph/badge.svg?token=OXK7R357AX)](https://codecov.io/gh/yuygfgg/AutoWorkflow)
 
-Declarative, type-safe automation/workflow engine for Python. Define tasks as plain functions, declare dependencies with simple helpers, and run them with a concurrent executor. For long-running automations, use the Engine with pluggable Triggers and Plugins.
+Declarative, type-safe workflow engine for Python. Define tasks as plain functions, wire dependencies declaratively, and run them with a concurrent executor. For long-running automations, use the Engine with pluggable Triggers, Plugins, and an optional Web UI.
 
 ### Why AutoWorkflow?
 
-- Clear, Pythonic API: tasks are normal functions; dependencies are declared via defaults.
-- Typed and explicit: helpers make dependencies and map operations obvious to readers and tools.
-- Flexible execution: concurrent execution with a thread pool.
-- Event-driven service: run workflows continuously with Triggers; inject services via Plugins.
+- **Clear Python functions**: tasks are normal functions; dependencies are explicit.
+- **Type-friendly primitives**: helpers make dependencies and map operations obvious to readers and tools.
+- **Concurrent execution**: run with a thread pool executor.
+- **Event-driven services**: Triggers and Plugins turn workflows into always-on automation.
 
 ---
 
@@ -25,9 +25,20 @@ pip install git+https://github.com/yuygfgg/autoworkflow
 
 ---
 
+## Two Complementary APIs
+
+AutoWorkflow provides two first-class ways to define workflows. Both compile to the same execution engine and can be used independently.
+
+- **Workflow API (declarative)**: register nodes on a `Workflow` and express dependencies with `workflow.dep(...)`.
+- **Flow/Task API (functional composition)**: compose tasks by calling them like regular functions within a `flow(...)` context.
+
+Choose the style that best matches your codebase. Examples below show feature parity.
+
+---
+
 ## Quick Start
 
-Define a workflow, add nodes with dependencies, and run:
+### Workflow API (declarative)
 
 ```python
 from autoworkflow import Workflow
@@ -54,46 +65,59 @@ out = workflow.run(initial_data={
 print(out[publish.node_id])  # "Published demo-1 to bucket-xyz"
 ```
 
-Run concurrently:
+Run concurrently or return only leaf results:
 
 ```python
 workflow.run(initial_data={"source_id": "id", "destination": "dest"}, executor="concurrent")
-```
-
-Return only leaf-node results:
-
-```python
 workflow.run(return_mode="leaves")
 ```
 
+### Flow/Task API (functional composition)
+
+```python
+from autoworkflow.api import flow, task, param, each, switch
+
+with flow("My First Workflow") as f:
+    @task
+    def fetch(source_id: str):
+        return {"id": source_id, "data": "raw"}
+
+    @task
+    def process(raw: dict):
+        return {**raw, "processed": True}
+
+    @task
+    def publish(result: dict, destination: str = "default"):
+        return f"Published {result['id']} to {destination}"
+
+    out = publish(process(fetch(param("source_id"))), destination=param("destination"))
+
+res = f.run(initial_data={"source_id": "demo-1", "destination": "bucket-xyz"})
+print(res[out.node_id])
+```
+
+Notes:
+- Outside `with flow(...)`, `@task` returns the original function unchanged (helpful for unit tests).
+- `param("key")` marks a runtime input resolved from `run(initial_data=...)`.
+
 ---
 
-## Core Concepts
+## Workflow API Reference (declarative)
 
-### Workflow and Nodes
+### Registering nodes and dependencies
 
-- `Workflow`: container for nodes and their dependency graph.
-- `@workflow.node`: register a function as a node. The node's name defaults to the function name, or you may set `name="..."`. You may also pass `retries=N` for simple retry logic.
+- `@workflow.node(name=..., retries=...)` registers a function as a node.
+- Declare dependencies with `workflow.dep(upstream)` as parameter defaults.
 
 ```python
 @workflow.node(name="transform", retries=2)
 def transform(data: dict):
     return {**data, "ok": True}
-```
 
-### Declaring Dependencies
-
-Use `workflow.dep(upstream_node)` to bind a parameter's default value to the output of an upstream node.
-
-```python
 @workflow.node
 def combine(a = workflow.dep(node_a), b = workflow.dep(node_b)):
     return (a, b)
-```
 
-You can also access parts of an upstream output using attribute or key access on the handle:
-
-```python
 user_info = workflow.node(fetch_user)
 
 @workflow.node
@@ -101,9 +125,7 @@ def greet(user_name = workflow.dep(user_info)["name"]):
     return f"Hello {user_name}!"
 ```
 
-### Context Injection (CONTEXT)
-
-Define a typed context by subclassing `BaseContext`. Use the `CONTEXT` sentinel to request the context in a node.
+### Context injection
 
 ```python
 from typing import Any
@@ -115,18 +137,11 @@ class AppContext(BaseContext):
 @workflow.node
 def use_db(ctx: AppContext = CONTEXT):
     assert hasattr(ctx, "db")
-    # ...
-```
 
-Provide the context at runtime:
-
-```python
 workflow.run(context=AppContext())
 ```
 
-### Map Nodes (Fan-out for lists)
-
-`workflow.map_node` defines a node that operates on each item of a list produced upstream. Declare the mapped item with `workflow.map_dep(...)`.
+### Map nodes (fan-out)
 
 ```python
 @workflow.node
@@ -142,11 +157,7 @@ leaves = workflow.run(return_mode="leaves")
 assert leaves[process_items.node_id] == ["A", "B", "C"]
 ```
 
-### Conditional Branching (case)
-
-Use `workflow.case(on=..., branches={...})` to choose a branch at runtime. Branch targets can be node handles or constants. You can also pre-bind arguments before inserting targets into `branches` using `workflow.bind(...)` (alias: `workflow.select(...)`).
-
-Basic usage (choose node or constant directly):
+### Conditional branching (case, bind/select)
 
 ```python
 @workflow.node
@@ -164,9 +175,9 @@ def branch_b():
 case_out = workflow.case(
     on=which,
     branches={
-        "a": branch_a,   # pick node directly
-        "b": branch_b,   # pick node directly
-        "none": "skip", # pick constant directly
+        "a": branch_a,
+        "b": branch_b,
+        "none": "skip",
     },
 )
 
@@ -175,7 +186,7 @@ def final(x = case_out):
     return x
 ```
 
-Pre-binding parameters (bind/select) with three equivalent styles:
+Pre-binding styles:
 
 ```python
 @workflow.node
@@ -190,8 +201,6 @@ def ship(item: dict, priority: str = "normal", warehouse: str = "A"):
 def choose_priority():
     return "high"
 
-# Style 1: use a (node, {bindings}) tuple directly inside `branches`
-# - Values in the dict can be constants or other NodeOutput(s) (as dependencies)
 case_via_tuple = workflow.case(
     on=choose_priority,
     branches={
@@ -201,7 +210,6 @@ case_via_tuple = workflow.case(
     },
 )
 
-# Style 2: create pre-bound nodes via `bind` and then place them into `branches`
 high_shipping = workflow.bind(ship, item=make_item, priority="high", warehouse="B")
 low_shipping = workflow.bind(ship, item=make_item, priority="low")
 case_via_bind = workflow.case(
@@ -213,7 +221,6 @@ case_via_bind = workflow.case(
     },
 )
 
-# Style 3: use `select` (an alias of `bind`)
 case_via_select = workflow.case(
     on=choose_priority,
     branches={
@@ -222,41 +229,146 @@ case_via_select = workflow.case(
         "none": "skip",
     },
 )
-
-@workflow.node
-def done1(x = case_via_tuple):
-    return x
-
-@workflow.node
-def done2(x = case_via_bind):
-    return x
-
-@workflow.node
-def done3(x = case_via_select):
-    return x
 ```
 
-### Retries
+### Retries, executors, return modes
 
-All node decorators accept `retries=int`. Failures raise `ExecutionError` after all attempts.
+- All node registrations accept `retries=int`.
+- Executors: `"concurrent"` (thread pool) or provide a custom `Executor`.
+- Return modes: `"all"` (default) or `"leaves"`.
+
+---
+
+## Flow/Task API Reference (functional composition)
+
+This API lives in `autoworkflow.api` and compiles to the same engine.
+
+### Building flows
+
+- `with flow(name, description=...) as f:` opens a build context.
+- `@task` inside a flow registers a node and returns a `Task` wrapper.
+- Calling a `Task` within the flow composes dependencies; outside the flow it calls the original Python function.
 
 ```python
-@workflow.node(retries=3)
-def fragile():
-    # may raise
-    return 42
+from autoworkflow.api import flow, task
+
+with flow("compose-demo") as f:
+    @task
+    def plus(a: int, b: int = 1) -> int:
+        return a + b
+
+    out = plus(plus(39, b=1), b=2)  # build-time composition
+
+res = f.run()
+print(res[out.node_id])  # 42
 ```
 
-### Executors and Return Modes
+### Runtime parameters: `param("key")`
 
-- Executors: `"concurrent"` (thread pool). You can also pass a custom executor implementing the `Executor` protocol.
-- Return modes: `"all"` (default) returns every node's output; `"leaves"` returns only leaf-node outputs.
+Use `param(...)` as a placeholder for values supplied via `f.run(initial_data=...)`. Placeholders are ignored during binding so they resolve at runtime.
+
+```python
+from autoworkflow.api import flow, task, param
+
+with flow("params-demo") as f:
+    @task
+    def publish(result: dict, destination: str = "default") -> str:
+        return f"Published {result['id']} to {destination}"
+
+    @task
+    def fetch(source_id: str) -> dict:
+        return {"id": source_id}
+
+    out = publish(fetch(param("source_id")), destination=param("destination"))
+
+print(f.run(initial_data={"source_id": "s-1", "destination": "bucket"})[out.node_id])
+```
+
+### Binding arguments explicitly
+
+- `task_obj.bind(**kwargs)` creates a pre-bound node handle.
+- Constants are embedded; dependencies can be other `Task` or `NodeOutput` values.
+
+```python
+with flow("bind-demo") as f:
+    @task
+    def ship(item: dict, priority: str = "normal") -> str:
+        return f"ship-{item['id']}-{priority}"
+
+    @task
+    def make() -> dict:
+        return {"id": "42"}
+
+    hi = ship.bind(item=make(), priority="high")
+    out = hi
+
+print(f.run()[out.node_id])  # "ship-42-high"
+```
+
+### Map operations: `each(...).over(...)` or `task.map(over=...)`
+
+Both forms create a `map` node that applies a task to each element from a list-producing upstream node. Optional `name`, `retries`, and constant bindings are supported.
+
+```python
+from autoworkflow.api import flow, task, each
+
+with flow("map-demo") as f:
+    @task
+    def items() -> list[str]:
+        return ["a", "b", "c"]
+
+    @task
+    def upcase(x: str) -> str:
+        return x.upper()
+
+    ups1 = each(upcase).over(items())
+    ups2 = upcase.map(over=items())
+
+assert f.run(return_mode="leaves")[ups1.node_id] == ["A", "B", "C"]
+assert f.run(return_mode="leaves")[ups2.node_id] == ["A", "B", "C"]
+```
+
+### Conditional branching: `switch(...).when(...).otherwise(...)`
+
+- `when(key_or_pred, target, **bindings)` adds a branch where `key_or_pred` is either a literal key or a predicate `(value) -> bool`.
+- `target` can be a constant, a `Task`, or a `NodeOutput`. When a `Task` is given, extra keyword arguments are bound as constants.
+
+```python
+from autoworkflow.api import flow, task, switch
+
+with flow("case-demo") as f:
+    @task
+    def which() -> str:
+        return "b"
+
+    @task
+    def A() -> str:
+        return "A"
+
+    @task
+    def B() -> str:
+        return "B"
+
+    choice = switch(which()).when("a", A).when("b", B).otherwise("skip")
+
+    @task
+    def final(x: str) -> str:
+        return x
+
+    out = final(choice)
+
+res = f.run()
+assert res[out.node_id] == "B"
+```
+
+### Running flows
+
+- `f.run(initial_data=..., context=..., executor=..., return_mode=...)` mirrors `Workflow.run(...)`.
+- Flows automatically prune isolated helper nodes so only the composed subgraph is executed.
 
 ---
 
 ## Long-Running Automation with Engine
-
-`Engine` manages workflows, plugins, and triggers to build event-driven services that run indefinitely.
 
 ```python
 from autoworkflow import Engine
@@ -278,18 +390,143 @@ Built-in triggers:
 
 ---
 
+### Engine ↔ Workflow: inputs and context
+
+How Engine supplies inputs to a Workflow, and how a Workflow should receive them.
+
+- **Data flow**:
+  - When a trigger fires, it emits a payload `Dict[str, Any]`.
+  - Engine merges `initial_data` (provided at `add_trigger(...)`) and the trigger payload into one `initial_data` for the run.
+  - Merge rule: first `initial_data`, then payload; on key conflicts, the payload value overwrites.
+- **Context flow**:
+  - Provide a `context` per trigger via `add_trigger(..., context=...)`, or set a per-run factory via `engine.set_context_factory(lambda: AppContext())`.
+  - Plugins can inject providers into the context automatically (see Plugins section).
+
+Receive these inputs in your Workflow by declaring node parameters without defaults (Workflow API), or by using `param("key")` placeholders (Flow/Task API). Keys must match.
+
+#### Example: DirectoryWatchTrigger → Workflow API
+
+```python
+from autoworkflow import Workflow
+from autoworkflow.services.triggers import DirectoryWatchTrigger
+from autoworkflow.services.engine import Engine
+
+workflow = Workflow(name="ingest-files")
+
+@workflow.node
+def read_file(file_path: str) -> bytes:
+    with open(file_path, "rb") as f:
+        return f.read()
+
+@workflow.node
+def store(content = workflow.dep(read_file), destination: str = "bucket") -> str:
+    # pretend to store and return an id
+    return f"stored://{destination}/obj-123"
+
+engine = Engine(config={})
+engine.register_workflow(workflow)
+
+trigger = DirectoryWatchTrigger(
+    watch_dir="/incoming",
+    suffix=".txt",
+    payload_key="file_path",  # payload will be {"file_path": "/incoming/xyz.txt"}
+)
+
+engine.add_trigger(
+    trigger,
+    workflow_name=workflow.name,
+    initial_data={"destination": "my-bucket"},  # merged, overridden by payload on conflicts
+)
+
+engine.run()
+```
+
+Notes:
+- The node `read_file` requires `file_path`, which is provided by the trigger payload.
+- The node `store` receives `destination` from `initial_data`.
+
+#### Example: DirectoryWatchTrigger → Flow/Task API
+
+```python
+from autoworkflow.api import flow, task, param
+from autoworkflow.services.triggers import DirectoryWatchTrigger
+from autoworkflow.services.engine import Engine
+
+with flow("ingest-files-flow") as f:
+    @task
+    def read_file(file_path: str) -> bytes:
+        with open(file_path, "rb") as fp:
+            return fp.read()
+
+    @task
+    def store(content: bytes, destination: str = "bucket") -> str:
+        return f"stored://{destination}/obj-123"
+
+    out = store(read_file(param("file_path")), destination=param("destination"))
+
+engine = Engine(config={})
+engine.register_workflow(f.workflow)  # register the compiled Workflow
+
+trigger = DirectoryWatchTrigger(
+    watch_dir="/incoming",
+    suffix=".txt",
+    payload_key="file_path",
+)
+
+engine.add_trigger(
+    trigger,
+    workflow_name=f.workflow.name,
+    initial_data={"destination": "my-bucket"},
+)
+
+engine.run()
+```
+
+#### Context: passing and injecting
+
+```python
+from typing import Any
+from autoworkflow import BaseContext
+from autoworkflow.services.engine import Engine
+
+class AppContext(BaseContext):
+    db: Any | None = None
+
+engine = Engine(config={})
+
+# Option A: provide a fixed context for one trigger
+ctx = AppContext()
+engine.add_trigger(trigger, workflow_name="ingest-files", context=ctx)
+
+# Option B: create a fresh context per run
+engine.set_context_factory(lambda: AppContext())
+```
+
+If plugins are registered, Engine will inject providers into the context instance before running the workflow. In a node, request the context via `ctx: AppContext = CONTEXT`.
+
+#### Multiple triggers to one workflow with different inputs
+
+```python
+engine.add_trigger(ScheduledTrigger("every 10s"), workflow_name=workflow.name, initial_data={"destination": "cold"})
+engine.add_trigger(DirectoryWatchTrigger("/hot", suffix=".bin"), workflow_name=workflow.name, initial_data={"destination": "hot"})
+```
+
+Each trigger produces its own `initial_data` per run, merged with its payload.
+
+---
+
 ## Web UI (Optional)
 
-AutoWorkflow includes an optional, lightweight Web UI to visualize workflow runs and their status in real-time. It's built with FastAPI and provides a simple dashboard to monitor the engine.
+The optional Web UI (FastAPI + Uvicorn) visualizes runs and node status in real time.
 
-To enable it, set `web_ui=True` when initializing the `Engine`:
+Enable it:
 
 ```python
 engine = Engine(config={}, web_ui=True)
 engine.run()
 ```
 
-By default, the UI is available at `http://127.0.0.1:8008`. You can customize the host and port:
+Custom host/port:
 
 ```python
 engine = Engine(config={}).enable_web_ui(host="127.0.0.1", port=8008)
@@ -297,17 +534,15 @@ engine = Engine(config={}).enable_web_ui(host="127.0.0.1", port=8008)
 
 The UI provides:
 
-- A list of all registered workflows and their structure.
-- A live-updating list of workflow runs.
-- The status of each node within a run (e.g., `pending`, `running`, `done`, `failed`).
-
-This feature is self-contained and requires `fastapi` and `uvicorn` to be installed.
+- Registered workflows and structure
+- Live-updating runs
+- Per-node status (pending, running, done, failed)
 
 ---
 
 ## Plugins (Service Injection)
 
-Plugins initialize services (e.g., clients) and inject them into the runtime context.
+Plugins initialize services (e.g., API clients) and inject them into the `BaseContext` used during execution.
 
 Plugin protocol (simplified):
 
@@ -334,7 +569,7 @@ engine.set_context_factory(lambda: AppContext())
 
 Provided in `autoworkflow_plugins.qbittorrent.QBittorrentPlugin`. It authenticates a qBittorrent WebUI client and injects it into the context under `qbittorrent` attributes.
 
-Configuration keys under `engine = Engine(config={"qbittorrent": {...}})` 
+Configuration keys under `engine = Engine(config={"qbittorrent": {...}})`:
 
 - `host` (str, default `"localhost"`)
 - `port` (int, default `8080`)
@@ -344,7 +579,7 @@ Configuration keys under `engine = Engine(config={"qbittorrent": {...}})`
 - `verify_ssl` (bool, default `True`)
 - `timeout` (int seconds, default `30`)
 
-or when initializing the QBittorrentPlugin:
+Or initialize explicitly:
 
 ```python
 from autoworkflow_plugins.qbittorrent import QBittorrentPlugin
@@ -354,7 +589,6 @@ engine.register_plugin(QBittorrentPlugin(
     port=8080,
     username="admin",
     password="adminadmin"
-    # ...
 ))
 ```
 
@@ -368,13 +602,7 @@ class MyContext(BaseContext, HasQBittorrent):
         self.qbittorrent: Client | None = None
 ```
 
-See `examples/torrent_watch_qb.py`. It watches a directory for new `.torrent` files, adds them to qBittorrent, waits for completion with progress display, and optionally compresses the result with 7-Zip when size exceeds a threshold.
-
-Prerequisites:
-
-- qBittorrent WebUI running and accessible
-- `qbittorrent-api` installed (`pip install qbittorrent-api`)
-- `7z` CLI available in PATH (install p7zip / 7-Zip)
+See `examples/torrent_watch_qb.py` for a complete example (directory watch → add torrent → wait for completion → optional 7-Zip compression).
 
 Run:
 
@@ -390,7 +618,7 @@ python examples/torrent_watch_qb.py \
 
 Provided in `autoworkflow_plugins.BangumiMoe.BangumiMoePlugin`. It authenticates against Bangumi.moe and injects a `BangumiMoeClient` into the context under `bangumi_moe`.
 
-Configuration keys under `engine = Engine(config={"bangumi_moe": {...}})`
+Configuration keys under `engine = Engine(config={"bangumi_moe": {...}})`:
 
 - `base_url` (str, default `"https://bangumi.moe"`)
 - `username` (str, required)
@@ -398,7 +626,7 @@ Configuration keys under `engine = Engine(config={"bangumi_moe": {...}})`
 - `verify_ssl` (bool, default `True`)
 - `timeout` (int seconds, default `30`)
 
-or when initializing the BangumiMoePlugin:
+Or initialize explicitly:
 
 ```python
 from autoworkflow_plugins.BangumiMoe import BangumiMoePlugin, HasBangumiMoe, BangumiMoeClient
@@ -423,7 +651,7 @@ class MyContext(BaseContext, HasBangumiMoe):
         self.bangumi_moe: BangumiMoeClient | None = None
 ```
 
-Example: publish a torrent file in a node using context injection:
+Example node using context injection:
 
 ```python
 from autoworkflow import Workflow, CONTEXT
@@ -441,16 +669,11 @@ def publish(ctx: MyContext = CONTEXT, torrent_path: str = "/path/to/file.torrent
     )
 ```
 
-Prerequisites:
-
-- Bangumi.moe account with valid credentials
-- A valid `.torrent` file to upload
-
 ---
 
-## Persisting State (Advanced)
+## Persisting State (advanced)
 
-Executors can persist per-node results via a state backend. Implement the `StateBackend` protocol and pass it to `Workflow.run(..., state_backend=...)` or `Engine.set_state_backend(...)`.
+Executors can persist per-node results via a state backend. Implement `StateBackend` and pass it to `Workflow.run(..., state_backend=...)` or `Engine.set_state_backend(...)`.
 
 ```python
 from typing import Any, Dict
@@ -472,7 +695,7 @@ class MemoryBackend(StateBackend):
 ## Errors and Debugging
 
 - `DefinitionError`: bad graph definitions (e.g., duplicate node ids, missing required `initial_data`).
-- `ExecutionError`: a node failed even after retries. The error includes a `node_id` attribute when available.
+- `ExecutionError`: a node failed even after retries; the error includes `node_id` when available.
 
 Tips:
 
@@ -481,7 +704,9 @@ Tips:
 
 ---
 
-## Public API (from autoworkflow)
+## Public API Surface
+
+From `autoworkflow`:
 
 - `Workflow`
 - `BaseContext`
@@ -489,6 +714,14 @@ Tips:
 - `Engine`
 - `ScheduledTrigger`
 - Exceptions: `WorkflowError`, `DefinitionError`, `ExecutionError`
+
+From `autoworkflow.api`:
+
+- `flow`
+- `task`
+- `param`
+- `each`
+- `switch`
 
 ---
 

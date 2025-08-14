@@ -53,6 +53,23 @@ class WebUIServer:
             data = sink.get_run(run_id) if sink else None
             return JSONResponse(content=data or {})
 
+        def _label_condition(cond: Any) -> str:
+            try:
+                if not callable(cond):
+                    return str(cond)
+                cond_str = str(cond)
+                # Heuristic: lambdas created by otherwise contain 'otherwise' in qualname
+                if "otherwise" in cond_str:
+                    return "otherwise"
+                name = getattr(cond, "__name__", None) or getattr(
+                    cond, "__qualname__", None
+                )
+                if name and name != "<lambda>":
+                    return str(name)
+                return "predicate"
+            except Exception:
+                return "predicate"
+
         @app.get("/workflows")
         def workflows() -> JSONResponse:
             out: Dict[str, Any] = {}
@@ -72,7 +89,7 @@ class WebUIServer:
 
                         branches = []
                         for cond, target in node_def.meta.get("branches", {}).items():
-                            branch_info: Dict[str, Any] = {"condition": str(cond)}
+                            branch_info: Dict[str, Any] = {"condition": _label_condition(cond)}
                             if hasattr(target, "node_id"):
                                 branch_info["target_node"] = target.node_id
                             else:
@@ -94,15 +111,17 @@ class WebUIServer:
                                 if not src_id:
                                     continue
                                 path_parts = []
-                                for kind, meta_part in getattr(dep, "access_path", ()):  # type: ignore[attr-defined]
+                                for kind, meta_part in getattr(dep, "access_path", ()):
                                     if kind in ("attr", "key"):
                                         path_parts.append(str(meta_part))
                                 subpath = ".".join(path_parts) if path_parts else ""
-                                labeled_items.append({
-                                    "from": src_id,
-                                    "arg": str(arg_name),
-                                    "path": subpath,
-                                })
+                                labeled_items.append(
+                                    {
+                                        "from": src_id,
+                                        "arg": str(arg_name),
+                                        "path": subpath,
+                                    }
+                                )
                             except Exception:
                                 continue
                         if labeled_items:
@@ -146,11 +165,15 @@ class WebUIServer:
                         meta = {"kind": node_def.kind}
                         if node_def.kind == "case":
                             if node_def.dependencies:
-                                on_dep_id = list(node_def.dependencies.values())[0].node_id
+                                on_dep_id = list(node_def.dependencies.values())[
+                                    0
+                                ].node_id
                                 meta["on"] = on_dep_id
                             branches = []
-                            for cond, target in node_def.meta.get("branches", {}).items():
-                                branch_info: Dict[str, Any] = {"condition": str(cond)}
+                            for cond, target in node_def.meta.get(
+                                "branches", {}
+                            ).items():
+                                branch_info: Dict[str, Any] = {"condition": _label_condition(cond)}
                                 if hasattr(target, "node_id"):
                                     branch_info["target_node"] = target.node_id
                                 else:
@@ -170,15 +193,17 @@ class WebUIServer:
                                     if not src_id:
                                         continue
                                     path_parts = []
-                                    for kind, meta_part in getattr(dep, "access_path", ()):  # type: ignore[attr-defined]
+                                    for kind, meta_part in getattr(dep, "access_path", ()):
                                         if kind in ("attr", "key"):
                                             path_parts.append(str(meta_part))
                                     subpath = ".".join(path_parts) if path_parts else ""
-                                    labeled_items.append({
-                                        "from": src_id,
-                                        "arg": str(arg_name),
-                                        "path": subpath,
-                                    })
+                                    labeled_items.append(
+                                        {
+                                            "from": src_id,
+                                            "arg": str(arg_name),
+                                            "path": subpath,
+                                        }
+                                    )
                                 except Exception:
                                     continue
                             if labeled_items:
