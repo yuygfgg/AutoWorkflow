@@ -669,6 +669,89 @@ def publish(ctx: MyContext = CONTEXT, torrent_path: str = "/path/to/file.torrent
     )
 ```
 
+### Cloudreve Plugin
+
+Provided in `autoworkflow_plugins.cloudreve.CloudrevePlugin`. It authenticates against a Cloudreve V3 server using the Python SDK and injects a `cloudreve` client into the context. See the SDK project for API details: [Cloudreve SDK](https://github.com/yxzlwz/cloudreve-sdk).
+
+Installation note (optional dependency): ensure the SDK is installed. This repo already lists `cloudreve` in `requirements.txt`.
+
+- Configuration keys under `engine = Engine(config={"cloudreve": {...}})`:
+  - `base_url` or `url` (str, default `"http://127.0.0.1:5212"`)
+  - `username` or `email` (str, required)
+  - `password` (str, required)
+
+Or initialize explicitly:
+
+```python
+from autoworkflow_plugins.cloudreve import CloudrevePlugin, HasCloudreve
+
+engine.register_plugin(CloudrevePlugin(
+    base_url="http://127.0.0.1:5212",
+    username="admin@cloudreve.org",
+    password="123456",
+))
+```
+
+Engine config example (overrides constructor values when both provided):
+
+```python
+from autoworkflow.services.engine import Engine
+
+engine = Engine(config={
+    "cloudreve": {
+        "base_url": "http://127.0.0.1:5212",
+        "username": "admin@cloudreve.org",
+        "password": "123456",
+    }
+})
+```
+
+Implement the `HasCloudreve` protocol in your Context to get typed access in nodes:
+
+```python
+from autoworkflow import BaseContext
+from autoworkflow_plugins.cloudreve import HasCloudreve
+
+class MyContext(BaseContext, HasCloudreve):
+    def __init__(self):
+        self.cloudreve = None  # Cloudreve client injected by the Engine
+```
+
+Example node using context injection and the SDK to upload and share a file:
+
+```python
+from autoworkflow import Workflow, CONTEXT
+
+workflow = Workflow(name="cloudreve-demo")
+
+@workflow.node
+def upload_and_share(
+    ctx: MyContext = CONTEXT,
+    local_path: str = "/path/to/file.txt",
+    remote_dir: str = "/python",
+    remote_name: str = "file.txt",
+):
+    client = ctx.cloudreve
+    assert client is not None, "Cloudreve client missing"
+
+    # Create directory if needed
+    client.create_dir(remote_dir)
+
+    # Upload file (remote path first, then local path per SDK)
+    client.upload(f"{remote_dir}/{remote_name}", local_path)
+
+    # Get file id and generate a share link
+    file_id = client.get_id(f"{remote_dir}/{remote_name}")
+    share_url = client.get_share_url(file_id)
+    return share_url
+```
+
+Notes:
+
+- The context attribute name defaults to `cloudreve`. If you pass a custom `name` to `CloudrevePlugin(name=...)`, the injected attribute will match that name.
+- The plugin will log in during setup and fail fast if credentials are missing or invalid.
+- For more SDK capabilities (download, direct links, etc.), refer to the official docs: [Cloudreve SDK](https://github.com/yxzlwz/cloudreve-sdk).
+
 ---
 
 ## Persisting State (advanced)

@@ -38,7 +38,6 @@ from autoworkflow.services.triggers import DirectoryWatchTrigger
 from autoworkflow_plugins.qbittorrent import QBittorrentPlugin, HasQBittorrent
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 def parse_args():
