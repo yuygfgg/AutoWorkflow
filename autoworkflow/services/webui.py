@@ -58,9 +58,63 @@ class WebUIServer:
             out: Dict[str, Any] = {}
             for name, wf in engine_ref._workflows.items():
                 graph = wf._build_graph()
+
+                nodes_with_meta = []
+                for node_id, node_def in graph.nodes.items():
+                    meta = {
+                        "kind": node_def.kind,
+                    }
+                    if node_def.kind == "case":
+                        # The 'on' dependency is the source of the branches.
+                        if node_def.dependencies:
+                            on_dep_id = list(node_def.dependencies.values())[0].node_id
+                            meta["on"] = on_dep_id
+
+                        branches = []
+                        for cond, target in node_def.meta.get("branches", {}).items():
+                            branch_info: Dict[str, Any] = {"condition": str(cond)}
+                            if hasattr(target, "node_id"):
+                                branch_info["target_node"] = target.node_id
+                            else:
+                                branch_info["target_node"] = None  # constant value
+                            branches.append(branch_info)
+
+                        meta["branches"] = branches
+
+                    nodes_with_meta.append({"id": node_id, **meta})
+
+                # Build labeled dependency edges per argument
+                deps_labeled: Dict[str, list[Dict[str, str]]] = {}
+                try:
+                    for node_id, node_def in graph.nodes.items():
+                        labeled_items: list[Dict[str, str]] = []
+                        for arg_name, dep in node_def.dependencies.items():
+                            try:
+                                src_id = getattr(dep, "node_id", None)
+                                if not src_id:
+                                    continue
+                                path_parts = []
+                                for kind, meta_part in getattr(dep, "access_path", ()):  # type: ignore[attr-defined]
+                                    if kind in ("attr", "key"):
+                                        path_parts.append(str(meta_part))
+                                subpath = ".".join(path_parts) if path_parts else ""
+                                labeled_items.append({
+                                    "from": src_id,
+                                    "arg": str(arg_name),
+                                    "path": subpath,
+                                })
+                            except Exception:
+                                continue
+                        if labeled_items:
+                            deps_labeled[node_id] = labeled_items
+                except Exception:
+                    deps_labeled = {}
+
                 out[name] = {
                     "nodes": list(graph.nodes.keys()),
+                    "nodes_meta": nodes_with_meta,
                     "dependencies": {k: list(v) for k, v in graph.dependencies.items()},
+                    "dependencies_labeled": deps_labeled,
                     "description": wf.description,
                 }
             return JSONResponse(content=out)
@@ -84,22 +138,70 @@ class WebUIServer:
 
             async def event_generator():
                 # send a snapshot first
+                workflows_data = {}
+                for name, wf in engine_ref._workflows.items():
+                    graph = wf._build_graph()
+                    nodes_with_meta = []
+                    for node_id, node_def in graph.nodes.items():
+                        meta = {"kind": node_def.kind}
+                        if node_def.kind == "case":
+                            if node_def.dependencies:
+                                on_dep_id = list(node_def.dependencies.values())[0].node_id
+                                meta["on"] = on_dep_id
+                            branches = []
+                            for cond, target in node_def.meta.get("branches", {}).items():
+                                branch_info: Dict[str, Any] = {"condition": str(cond)}
+                                if hasattr(target, "node_id"):
+                                    branch_info["target_node"] = target.node_id
+                                else:
+                                    branch_info["target_node"] = None
+                                branches.append(branch_info)
+                            meta["branches"] = branches
+                        nodes_with_meta.append({"id": node_id, **meta})
+
+                    # labeled dependencies for snapshot
+                    deps_labeled: Dict[str, list[Dict[str, str]]] = {}
+                    try:
+                        for node_id, node_def in graph.nodes.items():
+                            labeled_items: list[Dict[str, str]] = []
+                            for arg_name, dep in node_def.dependencies.items():
+                                try:
+                                    src_id = getattr(dep, "node_id", None)
+                                    if not src_id:
+                                        continue
+                                    path_parts = []
+                                    for kind, meta_part in getattr(dep, "access_path", ()):  # type: ignore[attr-defined]
+                                        if kind in ("attr", "key"):
+                                            path_parts.append(str(meta_part))
+                                    subpath = ".".join(path_parts) if path_parts else ""
+                                    labeled_items.append({
+                                        "from": src_id,
+                                        "arg": str(arg_name),
+                                        "path": subpath,
+                                    })
+                                except Exception:
+                                    continue
+                            if labeled_items:
+                                deps_labeled[node_id] = labeled_items
+                    except Exception:
+                        deps_labeled = {}
+
+                    workflows_data[name] = {
+                        "nodes": list(graph.nodes.keys()),
+                        "nodes_meta": nodes_with_meta,
+                        "dependencies": {
+                            k: list(v) for k, v in graph.dependencies.items()
+                        },
+                        "dependencies_labeled": deps_labeled,
+                        "description": wf.description,
+                    }
+
                 snap = json.dumps(
                     {
                         "type": "snapshot",
                         "seq": 0,
                         "runs": local_sink.list_runs(),
-                        "workflows": {
-                            name: {
-                                "nodes": list(wf._build_graph().nodes.keys()),
-                                "dependencies": {
-                                    k: list(v)
-                                    for k, v in wf._build_graph().dependencies.items()
-                                },
-                                "description": wf.description,
-                            }
-                            for name, wf in engine_ref._workflows.items()
-                        },
+                        "workflows": workflows_data,
                     }
                 )
                 yield f"data: {snap}\n\n"

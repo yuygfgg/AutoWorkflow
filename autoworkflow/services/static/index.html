@@ -71,7 +71,7 @@
 
         @media (min-width: 1024px) {
             .grid {
-                grid-template-columns: 1.2fr 1fr;
+                grid-template-columns: 1fr;
             }
         }
 
@@ -149,10 +149,6 @@
                 <div class="title">Runs</div>
                 <div id="runs"></div>
             </div>
-            <div class="card">
-                <div class="title">Workflows</div>
-                <div id="workflows"></div>
-            </div>
         </div>
     </main>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -189,31 +185,151 @@
         });
 
         const runsEl = document.getElementById('runs');
-        const wfsEl = document.getElementById('workflows');
         const lastUpdatedEl = document.getElementById('last-updated');
         let WF_CACHE = {};
 
         function buildMermaidGraph(wf) {
-            let mermaidGraph = 'graph TD;\n';
-            const allNodes = new Set(wf.nodes || []);
-            const referencedNodes = new Set();
+            // Fallback for old data structure
+            if (!wf.nodes_meta) {
+                let mermaidGraph = 'graph LR;\n';
+                const allNodes = new Set(wf.nodes || []);
+                const referencedNodes = new Set();
 
-            if (wf.dependencies) {
-                for (const node in wf.dependencies) {
-                    allNodes.add(node);
-                    for (const dep of wf.dependencies[node]) {
-                        allNodes.add(dep);
-                        referencedNodes.add(node);
-                        referencedNodes.add(dep);
-                        mermaidGraph += `    ${dep} --> ${node};\n`;
+                if (wf.dependencies) {
+                    for (const node in wf.dependencies) {
+                        allNodes.add(node);
+                        for (const dep of wf.dependencies[node]) {
+                            allNodes.add(dep);
+                            referencedNodes.add(node);
+                            referencedNodes.add(dep);
+                            mermaidGraph += `    ${dep} --> ${node};\n`;
+                        }
+                    }
+                }
+                allNodes.forEach(node => {
+                    if (!referencedNodes.has(node)) {
+                        mermaidGraph += `    ${node};\n`;
+                    }
+                });
+                return mermaidGraph;
+            }
+
+            let mermaidGraph = 'graph LR;\n';
+            const nodesMeta = wf.nodes_meta || [];
+            const dependencies = wf.dependencies || {};
+            const labeledDeps = wf.dependencies_labeled || {};
+
+            const caseNodes = nodesMeta.filter(n => n.kind === 'case');
+            const caseNodeIds = new Set(caseNodes.map(n => n.id));
+
+            const edges = new Set();
+            const allNodesInEdges = new Set();
+
+            function escapeLabel(txt) {
+                return String(txt).replace(/"/g, '#quot;');
+            }
+
+            function formatArgLabel(arg, path) {
+                if (path) {
+                    return escapeLabel(`${arg}${path ? ` (${path})` : ''}`);
+                }
+                return escapeLabel(arg);
+            }
+
+            // Process normal dependencies with argument labels when available
+            if (labeledDeps && Object.keys(labeledDeps).length > 0) {
+                for (const nodeId in labeledDeps) {
+                    if (caseNodeIds.has(nodeId)) continue; // skip drawing edges TO case meta-nodes
+                    const arr = labeledDeps[nodeId] || [];
+                    for (const item of arr) {
+                        if (!item || !item.from) continue;
+                        if (caseNodeIds.has(item.from)) continue; // edges FROM case handled separately
+                        const label = formatArgLabel(item.arg || '', item.path || '');
+                        edges.add(`    ${item.from} -- ${label} --> ${nodeId}`);
+                    }
+                }
+            } else {
+                // fallback to unlabeled dependencies
+                for (const nodeId in dependencies) {
+                    if (caseNodeIds.has(nodeId)) continue;
+                    for (const depId of dependencies[nodeId]) {
+                        if (caseNodeIds.has(depId)) continue;
+                        edges.add(`    ${depId} --> ${nodeId}`);
                     }
                 }
             }
-            allNodes.forEach(node => {
-                if (!referencedNodes.has(node)) {
-                    mermaidGraph += `    ${node};\n`;
+
+            // Process case nodes for control flow
+            for (const caseNode of caseNodes) {
+                const onNode = caseNode.on;
+                if (!onNode) continue;
+
+                // successors are nodes that depend on the case node
+                const successors = [];
+                for (const nid in dependencies) {
+                    if ((dependencies[nid] || []).includes(caseNode.id)) {
+                        successors.push(nid);
+                    }
+                }
+
+                // determine the argument name used by successors to consume the case result
+                const succArgNameMap = {};
+                for (const succ of successors) {
+                    const labeledList = labeledDeps[succ] || [];
+                    const found = labeledList.find(it => it.from === caseNode.id);
+                    succArgNameMap[succ] = found ? (found.arg || '') : '';
+                }
+
+                for (const branch of caseNode.branches) {
+                    const condition = escapeLabel(branch.condition);
+                    if (branch.target_node) {
+                        // edge from on -> target labeled by condition
+                        edges.add(`    ${onNode} -- ${condition} --> ${branch.target_node}`);
+                        // connect target to each successor, labeled with arg name
+                        for (const successor of successors) {
+                            const argLabel = escapeLabel(succArgNameMap[successor] || '');
+                            if (argLabel) {
+                                edges.add(`    ${branch.target_node} -- ${argLabel} --> ${successor}`);
+                            } else {
+                                edges.add(`    ${branch.target_node} --> ${successor}`);
+                            }
+                        }
+                    } else {
+                        // constant branch: create a dummy node and connect
+                        const dummyNodeId = `${caseNode.id}_${condition.replace(/\W/g, '_')}_noop`;
+                        const dummyNodeLabel = `(no op)`;
+                        mermaidGraph += `    ${dummyNodeId}["${dummyNodeLabel}"];\n`;
+                        edges.add(`    ${onNode} -- ${condition} --> ${dummyNodeId}`);
+                        for (const successor of successors) {
+                            const argLabel = escapeLabel(succArgNameMap[successor] || '');
+                            if (argLabel) {
+                                edges.add(`    ${dummyNodeId} -- ${argLabel} --> ${successor}`);
+                            } else {
+                                edges.add(`    ${dummyNodeId} --> ${successor}`);
+                            }
+                        }
+                    }
+                }
+            }
+
+            edges.forEach(edge => {
+                mermaidGraph += `${edge};\n`;
+                // A bit simplistic, but should cover most node names
+                const match = edge.trim().match(/^(\w+)\s*--.*-->\s*(\w+)$/);
+                if (match) {
+                    allNodesInEdges.add(match[1]);
+                    allNodesInEdges.add(match[2]);
                 }
             });
+
+            // Add nodes not in any edge
+            const allGraphNodes = new Set(wf.nodes || []);
+            allGraphNodes.forEach(nodeId => {
+                if (!allNodesInEdges.has(nodeId) && !caseNodeIds.has(nodeId)) {
+                    mermaidGraph += `    ${nodeId};\n`;
+                }
+            });
+
             return mermaidGraph;
         }
 
@@ -243,15 +359,6 @@
             </div>
             <div class="mermaid" style="background: transparent; border: none; padding: 0;">${mermaidGraph}</div>
           </div>`;
-            }).join('');
-
-            wfsEl.innerHTML = Object.entries(wfs).map(([name, wf]) => {
-                let mermaidGraph = buildMermaidGraph(wf);
-                return `<div class="workflow-item">
-                    <div class="title">${name}</div>
-                    ${wf.description ? `<div class="muted" style="margin-bottom: 8px;">${wf.description}</div>` : ''}
-                    <div class="mermaid">${mermaidGraph}</div>
-                </div>`
             }).join('');
             mermaid.run({
                 nodes: document.querySelectorAll('.mermaid')
