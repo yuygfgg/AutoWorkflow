@@ -73,7 +73,7 @@ class QBittorrentPlugin(Plugin[QBittorrentClient]):
     def name(self) -> str:
         return self._name
 
-    def setup(self, engine: "Engine", config: Dict[str, Any]):  # type: ignore[name-defined]
+    def setup(self, engine: "Engine", config: Dict[str, Any]):
         """
         Initialize and authenticate the qBittorrent client.
 

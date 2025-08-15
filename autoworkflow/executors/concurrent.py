@@ -62,7 +62,7 @@ class ConcurrentExecutor(Executor):
                 targets: List[str] = []
                 for _cond, _t in _branches.items():
                     if hasattr(_t, "node_id"):
-                        tid = cast(Any, _t).node_id  # type: ignore[attr-defined]
+                        tid = cast(Any, _t).node_id
                         targets.append(tid)
                         target_to_case[tid] = _ndef.id
                 if targets:
@@ -140,14 +140,14 @@ class ConcurrentExecutor(Executor):
                     matched = cond == on_val
                 if matched:
                     if hasattr(target, "node_id"):
-                        chosen = cast(Any, target).node_id  # type: ignore[attr-defined]
+                        chosen = cast(Any, target).node_id
                         chosen_is_target = True
                     else:
                         chosen = target
                     # collect other branch node ids to disable
                     for _cond2, _target2 in branches_map.items():
                         if hasattr(_target2, "node_id"):
-                            tid = cast(Any, _target2).node_id  # type: ignore[attr-defined]
+                            tid = cast(Any, _target2).node_id
                             if not (chosen_is_target and tid == chosen):
                                 disabled.append(tid)
                     break
@@ -285,7 +285,7 @@ class ConcurrentExecutor(Executor):
                                 NodeEvent,
                             )  # local import to avoid cycles
                         except Exception:
-                            NodeEvent = None  # type: ignore
+                            NodeEvent = None
                         if NodeEvent is not None:
                             try:
                                 # Mark case branches as 'scheduled' only when they are truly scheduled.

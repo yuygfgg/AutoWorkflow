@@ -111,7 +111,7 @@ def test_bangumimoe_plugin_setup_with_engine_config_override():
     pl.setup(eng, eng.config)
     provider = pl.get_context_provider()
     assert provider is not None
-    assert provider.base_url == "https://example.org"  # type: ignore[attr-defined]
+    assert provider.base_url == "https://example.org"
     assert provider.username == "u2"
     assert provider.password == "p2"
 
@@ -146,6 +146,6 @@ def test_bangumimoe_plugin_supports_fallback_keys_with_class_name():
 
     provider = pl.get_context_provider()
     assert provider is not None
-    assert provider.base_url == "https://fallback.example"  # type: ignore[attr-defined]
+    assert provider.base_url == "https://fallback.example"
     assert provider.username == "fu"
     assert provider.password == "fp"

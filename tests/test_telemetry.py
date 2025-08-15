@@ -29,7 +29,7 @@ def test_telemetry_run_lifecycle_and_status_mapping_and_getters():
     assert run_id in runs
     detail = sink.get_run(run_id)
     assert detail is not None and detail.get("success") is False
-    status_map: Dict[str, str] = detail.get("node_status", {})  # type: ignore[assignment]
+    status_map: Dict[str, str] = detail.get("node_status", {})
     assert status_map.get("n1") == "done"
     assert status_map.get("n2") == "skipped"
     assert status_map.get("n3") == "failed"

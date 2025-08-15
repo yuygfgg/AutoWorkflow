@@ -19,7 +19,7 @@ def test_duplicate_node_names_raise():
     with pytest.raises(DefinitionError):
 
         @wf.node(name="x")
-        def b():  # type: ignore[func-returns-value]
+        def b():
             return 2
 
 
@@ -116,7 +116,7 @@ def test_invalid_return_mode_raises():
 def test_map_node_invalid_param_count_raises():
     wf = Workflow(name="Core-Map-Invalid")
 
-    def f(a, b):  # type: ignore[no-untyped-def]
+    def f(a, b):
         return a, b
 
     with pytest.raises(DefinitionError):

@@ -82,7 +82,7 @@ def test_engine_trigger_callback_runs_workflow_with_context_plugins_and_state_ba
         def attach(self, callback: Callable[[Dict[str, Any]], None]) -> None:
             pass
 
-        def tick(self, now=None):  # type: ignore[no-untyped-def]
+        def tick(self, now=None):
             pass
 
         def stop(self) -> None:
@@ -97,6 +97,7 @@ def test_engine_trigger_callback_runs_workflow_with_context_plugins_and_state_ba
 
     # Verify that results were saved to StateBackend (run_id is dynamic; just assert the first entry)
     import time as _t
+
     deadline = _t.time() + 0.5
     while not backend.saved and _t.time() < deadline:
         _t.sleep(0.005)
@@ -188,14 +189,14 @@ def test_engine_run_calls_plugin_setup_and_teardown():
     eng.register_plugin(pl)
 
     class KBTrigger:
-        def attach(self, callback):  # type: ignore[no-untyped-def]
+        def attach(self, callback):
             # Raise KeyboardInterrupt so engine run exits and should call plugin teardown
             raise KeyboardInterrupt()
 
-        def tick(self, now=None):  # type: ignore[no-untyped-def]
+        def tick(self, now=None):
             pass
 
-        def stop(self):  # type: ignore[no-untyped-def]
+        def stop(self):
             pass
 
     wf = Workflow(name="noop")
@@ -227,7 +228,7 @@ def test_add_trigger_with_missing_workflow_does_not_execute():
             # no-op for tests
             pass
 
-        def tick(self, now=None):  # type: ignore[no-untyped-def]
+        def tick(self, now=None):
             pass
 
         def stop(self) -> None:
@@ -263,7 +264,7 @@ def test_engine_add_trigger_binds_callback_and_runs_with_initial_payload_and_fac
         def attach(self, callback: Callable[[Dict[str, Any]], None]) -> None:
             pass
 
-        def tick(self, now=None):  # type: ignore[no-untyped-def]
+        def tick(self, now=None):
             pass
 
         def stop(self) -> None:
@@ -291,7 +292,7 @@ def test_engine_context_factory_exception_and_plugin_injection_exception_are_swa
     def bad_factory():
         raise RuntimeError("factory boom")
 
-    eng.set_context_factory(bad_factory)  # type: ignore[arg-type]
+    eng.set_context_factory(bad_factory)
 
     # plugin whose injection methods raise
     class BadPlugin:
@@ -322,13 +323,13 @@ def test_engine_context_factory_exception_and_plugin_injection_exception_are_swa
     eng.register_workflow(wf)
 
     class Tr:
-        def attach(self, callback):  # type: ignore[no-untyped-def]
+        def attach(self, callback):
             callback({})
 
-        def tick(self, now=None):  # type: ignore[no-untyped-def]
+        def tick(self, now=None):
             pass
 
-        def stop(self):  # type: ignore[no-untyped-def]
+        def stop(self):
             pass
 
     t = Tr()
@@ -345,13 +346,13 @@ def test_engine_run_starts_triggers_without_bound_callback():
         def __init__(self):
             self.started = False
 
-        def attach(self, callback):  # type: ignore[no-untyped-def]
+        def attach(self, callback):
             self.started = True
 
-        def tick(self, now=None):  # type: ignore[no-untyped-def]
+        def tick(self, now=None):
             pass
 
-        def stop(self):  # type: ignore[no-untyped-def]
+        def stop(self):
             pass
 
     tr = Tr()
