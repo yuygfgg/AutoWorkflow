@@ -32,7 +32,9 @@ class Engine:
         self._plugins: Dict[str, Plugin] = {}
         # Thread pool to execute workflow runs triggered by events
         max_workers = int(self.config.get("event_max_workers", 8))
-        self._event_executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="aw-event")
+        self._event_executor = ThreadPoolExecutor(
+            max_workers=max_workers, thread_name_prefix="aw-event"
+        )
         self._context_factory: Optional[Callable[[], BaseContext]] = None
         self._state_backend: Any | None = None
         # Optional telemetry sink and embedded Web UI server

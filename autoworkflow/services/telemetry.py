@@ -19,7 +19,9 @@ class NodeEvent:
 
     run_id: str
     node_id: str
-    event: Literal["scheduled", "started", "finished", "failed", "run_started", "run_finished"]
+    event: Literal[
+        "scheduled", "started", "finished", "failed", "run_started", "run_finished"
+    ]
     timestamp: float
     data: Optional[Dict[str, Any]] = None
 

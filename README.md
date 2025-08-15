@@ -519,15 +519,6 @@ Each trigger produces its own `initial_data` per run, merged with its payload.
 
 The optional Web UI (FastAPI + Uvicorn) visualizes runs and node status in real time.
 
-Enable it:
-
-```python
-engine = Engine(config={}, web_ui=True)
-engine.run()
-```
-
-Custom host/port:
-
 ```python
 engine = Engine(config={}).enable_web_ui(host="127.0.0.1", port=8008)
 ```

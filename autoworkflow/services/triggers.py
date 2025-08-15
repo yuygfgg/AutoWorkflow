@@ -161,4 +161,3 @@ class DirectoryWatchTrigger:
             )
         except Exception as e:
             logger.exception("DirectoryWatchTrigger scan error: %s", e)
-

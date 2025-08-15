@@ -4,7 +4,15 @@ Plugin protocol.
 
 from __future__ import annotations
 
-from typing import Protocol, Dict, Any, TYPE_CHECKING, Generic, TypeVar, runtime_checkable
+from typing import (
+    Protocol,
+    Dict,
+    Any,
+    TYPE_CHECKING,
+    Generic,
+    TypeVar,
+    runtime_checkable,
+)
 
 if TYPE_CHECKING:
     from .engine import Engine

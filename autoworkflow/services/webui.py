@@ -89,7 +89,9 @@ class WebUIServer:
 
                         branches = []
                         for cond, target in node_def.meta.get("branches", {}).items():
-                            branch_info: Dict[str, Any] = {"condition": _label_condition(cond)}
+                            branch_info: Dict[str, Any] = {
+                                "condition": _label_condition(cond)
+                            }
                             if hasattr(target, "node_id"):
                                 branch_info["target_node"] = target.node_id
                             else:
@@ -173,7 +175,9 @@ class WebUIServer:
                             for cond, target in node_def.meta.get(
                                 "branches", {}
                             ).items():
-                                branch_info: Dict[str, Any] = {"condition": _label_condition(cond)}
+                                branch_info: Dict[str, Any] = {
+                                    "condition": _label_condition(cond)
+                                }
                                 if hasattr(target, "node_id"):
                                     branch_info["target_node"] = target.node_id
                                 else:
@@ -193,7 +197,9 @@ class WebUIServer:
                                     if not src_id:
                                         continue
                                     path_parts = []
-                                    for kind, meta_part in getattr(dep, "access_path", ()):
+                                    for kind, meta_part in getattr(
+                                        dep, "access_path", ()
+                                    ):
                                         if kind in ("attr", "key"):
                                             path_parts.append(str(meta_part))
                                     subpath = ".".join(path_parts) if path_parts else ""
