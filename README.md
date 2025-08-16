@@ -1,6 +1,7 @@
 ## AutoWorkflow
 
-[![codecov](https://codecov.io/gh/yuygfgg/AutoWorkflow/graph/badge.svg?token=OXK7R357AX)](https://codecov.io/gh/yuygfgg/AutoWorkflow) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/a1becbf2b2e748a286a1882a8ac64f4d)](https://app.codacy.com/gh/yuygfgg/AutoWorkflow/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![codecov](https://codecov.io/gh/yuygfgg/AutoWorkflow/graph/badge.svg?token=OXK7R357AX)](https://codecov.io/gh/yuygfgg/AutoWorkflow) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/a1becbf2b2e748a286a1882a8ac64f4d)](https://app.codacy.com/gh/yuygfgg/AutoWorkflow/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade) [![CI](https://github.com/yuygfgg/AutoWorkflow/actions/workflows/ci.yml/badge.svg)](https://github.com/yuygfgg/AutoWorkflow/actions/workflows/ci.yml)
+
 
 Declarative, type-safe workflow engine for Python. Define tasks as plain functions, wire dependencies declaratively, and run them with a concurrent executor. For long-running automation, use the Engine with pluggable Triggers, Plugins, and an optional Web UI.
 
